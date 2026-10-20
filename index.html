@@ -24,6 +24,9 @@ body{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans 
 .hint{font-size:12px;color:#999;text-align:center;line-height:1.6}
 .err{color:#d33}
 
+.screen select{height:44px;border:0;border-bottom:1px solid #ddd;font-size:16px;color:#191919;outline:0;background:none;font-family:inherit}
+.ai{margin:14px auto;max-width:82%;background:rgba(255,255,255,.7);border-radius:14px;padding:10px 14px;font-size:14px;line-height:1.5;color:#33404c;text-align:center;white-space:pre-wrap;word-break:keep-all}
+.ai b{display:block;font-size:11px;font-weight:600;color:#6b7b8a;margin-bottom:3px}
 .screen .link{background:none;height:auto;margin-top:0;font-size:14px;font-weight:400;color:#888}
 #top{display:flex;align-items:center;gap:10px;padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top))}
 #tpic{cursor:pointer}
@@ -73,6 +76,7 @@ body{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans 
   <input id="file" type="file" accept="image/*" class="hidden">
   <label>상대 이름<input id="name" type="text" autocomplete="off" required></label>
   <label>헤어진 날<input id="date" type="date"></label>
+  <label>AI 한마디 (메시지 내용은 AI에게 안 보내요)<select id="ai"><option value="day">매일</option><option value="week">매주</option><option value="off">끔</option></select></label>
   <button id="go">방 만들기</button>
   <button type="button" id="cancel" class="link hidden">취소</button>
   <p class="hint">이 방의 메시지는 아무에게도 가지 않아요.<br>서버에도 암호문만 남아요.</p>
@@ -143,6 +147,17 @@ async function enter(){
  catch(e){msgs=[];plain=[]}                 // 다른 키로 잠긴 옛 캐시
  show('room');openRoom();
  await sync();
+ maybeAi();
+}
+// ── 한마디: 마지막 한마디 뒤로 내가 쓴 게 있고 간격이 지났으면, AI가 "읽고"(1 사라짐) 한마디 ──
+// AI에겐 D+N, 요일, 시각, 개수만 보낸다. 서버도 20시간에 한 번만 받아준다.
+const GAP={day:20*36e5,week:7*864e5};
+async function maybeAi(){
+ const gap=GAP[profile.ai||'day'],last=plain.findLastIndex(m=>m.ai),unread=plain.length-1-last;
+ if(!gap||!unread||Date.now()-plain[last<0?0:last].ts<gap)return;
+ const now=new Date();
+ const {data,error}=await sb.functions.invoke('hanmadi',{body:{day:dday(),weekday:now.getDay(),hour:now.getHours(),count:unread}});
+ if(!error&&data?.text)push({ai:data.text});
 }
 async function sync(){
  const last=msgs.length?msgs[msgs.length-1].id:0;
@@ -180,7 +195,7 @@ $('file').onchange=async e=>{
  $('pic').src=await shrink(f,160,true);picFull=await shrink(f,1280);
 };
 $('menu').onclick=()=>{
- $('name').value=profile.name;$('date').value=profile.date||'';$('pic').src=profile.pic;picFull=profile.picFull||null;
+ $('name').value=profile.name;$('date').value=profile.date||'';$('ai').value=profile.ai||'day';$('pic').src=profile.pic;picFull=profile.picFull||null;
  $('go').textContent='저장';$('cancel').classList.remove('hidden');show('setup');
 };
 $('cancel').onclick=()=>show('room');
@@ -197,7 +212,7 @@ async function saveProfile(p){
 $('setup').onsubmit=async e=>{
  e.preventDefault();
  const b=$('go'),label=b.textContent,first=!profileRow;b.disabled=true;b.textContent='잠그는 중…';
- const p={name:$('name').value.trim(),date:$('date').value,pic:$('pic').src};
+ const p={name:$('name').value.trim(),date:$('date').value,ai:$('ai').value,pic:$('pic').src};
  if(picFull)p.picFull=picFull;
  const ok=await saveProfile(p);
  b.disabled=false;b.textContent=label;
@@ -210,19 +225,22 @@ $('setup').onsubmit=async e=>{
 const dateStr=ts=>new Date(ts).toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
 const timeStr=ts=>new Date(ts).toLocaleTimeString('ko-KR',{hour:'numeric',minute:'2-digit'});
 const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const dday=()=>profile.date?Math.floor((Date.now()-new Date(profile.date+'T00:00'))/864e5):null;
 function openRoom(){
  $('tpic').src=profile.pic;$('tname').textContent=profile.name;
- if(profile.date)$('tday').textContent='D+'+Math.floor((Date.now()-new Date(profile.date+'T00:00'))/864e5);
+ const d=dday();$('tday').textContent=d==null?'':'D+'+d;
  render();
 }
 function render(){
  let last='',html='';
- for(const m of plain){
+ const lastAi=plain.findLastIndex(m=>m.ai);   // 이 앞까지는 "읽음": 1 안 보임
+ plain.forEach((m,i)=>{
   const d=dateStr(m.ts);
   if(d!==last){html+=`<div class="date"><span>${d}</span></div>`;last=d}
+  if(m.ai){html+=`<div class="ai"><b>한마디</b>${esc(m.ai)}</div>`;return}
   const body=m.img?`<img class="photo" src="${m.img}" alt="">`:`<div class="bub">${esc(m.t)}</div>`;
-  html+=`<div class="msg"><div class="meta"><b>1</b><span>${timeStr(m.ts)}</span></div>${body}</div>`;
- }
+  html+=`<div class="msg"><div class="meta">${i<lastAi?'':'<b>1</b>'}<span>${timeStr(m.ts)}</span></div>${body}</div>`;
+ });
  $('list').innerHTML=html;$('list').scrollTop=$('list').scrollHeight;
 }
 // ponytail: 서버 먼저, 성공해야 화면에 붙음. 오프라인 큐는 필요해지면.

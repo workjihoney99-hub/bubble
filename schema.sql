@@ -25,3 +25,23 @@ create policy "own profile"  on profiles for all to authenticated
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "own messages" on messages for all to authenticated
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ── 한마디(AI) 하루 1회 제한 ──
+-- 정책 없음 = 사용자가 직접 못 건드림. 아래 함수만 쓴다.
+create table ai_usage (
+  user_id uuid primary key references auth.users on delete cascade,
+  last_at timestamptz not null
+);
+alter table ai_usage enable row level security;
+
+-- 20시간 안 지났으면 false. 확인과 기록을 한 문장으로 해서 동시 호출에도 한 번만 통과.
+create function claim_ai_slot() returns boolean
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into ai_usage (user_id, last_at) values (auth.uid(), now())
+  on conflict (user_id) do update set last_at = now()
+    where ai_usage.last_at < now() - interval '20 hours';
+  return found;
+end $$;
+revoke all on function claim_ai_slot() from public, anon;
+grant execute on function claim_ai_slot() to authenticated;
