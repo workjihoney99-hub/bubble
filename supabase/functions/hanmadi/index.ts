@@ -27,14 +27,14 @@ const int = (v: unknown, max: number) => Math.min(max, Math.max(0, Math.floor(Nu
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
-  // 사용자 토큰으로 호출 → 로그인 안 했거나 11시간 안 지났으면 여기서 끝. Claude 비용은 이 뒤에서만 나감.
+  // 사용자 토큰으로 호출 → 로그인 안 했거나 오늘(한국 날짜) 이미 받았으면 여기서 끝. Claude 비용은 이 뒤에서만 나감.
   // ponytail: Claude 호출이 실패해도 그날 몫은 써버림. 실패가 잦아지면 되돌리는 RPC 추가.
   const sb = createClient(SB_URL, SB_KEY, {
     global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
   });
-  const { data: ok, error } = await sb.rpc("claim_ai_slot");
+  const { data: at, error } = await sb.rpc("claim_ai_slot"); // 받은 시각 or null
   if (error) return json({ error: "auth" }, 401);
-  if (!ok) return json({ error: "too_soon" }, 429);
+  if (!at) return json({ error: "too_soon" }, 429);
 
   // 클라이언트 값은 숫자로만 받는다 (프롬프트에 임의 문자열이 못 들어가게)
   const b = await req.json().catch(() => ({}));
@@ -53,7 +53,8 @@ Deno.serve(async (req) => {
     });
     if (msg.stop_reason === "refusal") return json({ error: "refusal" }, 502);
     const text = msg.content.flatMap((c) => (c.type === "text" ? [c.text] : [])).join("").trim();
-    return text ? json({ text }) : json({ error: "empty" }, 502);
+    // ts = 서버가 기록한 시각. 앱이 이걸 한마디의 시각으로 써야 due_pushes()가 "그 뒤에 쓴 글"을 정확히 센다.
+    return text ? json({ text, ts: Math.floor(Date.parse(at)) }) : json({ error: "empty" }, 502);
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError) return json({ error: "bad_key" }, 500);
     if (e instanceof Anthropic.RateLimitError) return json({ error: "busy" }, 503);
