@@ -80,6 +80,7 @@ body{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans 
  <div id="top" class="hidden" role="button" aria-label="설정 열기"><img id="tpic" alt=""><div><div class="name" id="tname"></div><div class="day" id="tday"></div></div>
   <svg id="menu" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
  </div>
+ <input id="tfile" type="file" accept="image/*" class="hidden">
  <div id="list" class="hidden"></div>
  <div id="bar" class="hidden">
   <button id="add" aria-label="사진 보내기">+</button>
@@ -177,18 +178,27 @@ $('top').onclick=()=>{
  $('go').textContent='저장';$('cancel').classList.remove('hidden');show('setup');
 };
 $('cancel').onclick=()=>show('room');
-$('setup').onsubmit=async e=>{
- e.preventDefault();
- const b=$('go'),label=b.textContent;b.disabled=true;b.textContent='잠그는 중…';
- const p={name:$('name').value.trim(),date:$('date').value,pic:$('pic').src};
+// 상단 프로필 사진은 누르면 바로 바꾸기 (tfile은 #top 밖에 있어야 클릭이 설정으로 번지지 않음)
+$('tpic').onclick=e=>{e.stopPropagation();$('tfile').click()};
+$('tfile').onchange=async e=>{
+ const f=e.target.files[0];e.target.value='';if(!f)return;
+ if(await saveProfile({...profile,pic:await shrink(f,160,true)}))$('tpic').src=profile.pic;
+};
+async function saveProfile(p){
  const en=await enc(key,p);
  const {data:{session}}=await sb.auth.getSession();
  const {error}=profileRow
   ?await sb.from('profiles').update(en).eq('user_id',session.user.id)
   :await sb.from('profiles').insert({salt:'v1',...en});
+ if(error){alert('저장 실패: '+error.message);return false}
+ profile=p;profileRow={salt:'v1',...en};return true;
+}
+$('setup').onsubmit=async e=>{
+ e.preventDefault();
+ const b=$('go'),label=b.textContent,first=!profileRow;b.disabled=true;b.textContent='잠그는 중…';
+ const ok=await saveProfile({name:$('name').value.trim(),date:$('date').value,pic:$('pic').src});
  b.disabled=false;b.textContent=label;
- if(error)return alert('저장 실패: '+error.message);
- const first=!profileRow;profile=p;profileRow={salt:'v1',...en};
+ if(!ok)return;
  if(first)return enter();
  show('room');openRoom();
 };
