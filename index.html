@@ -14,7 +14,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;background:#fff;color:#191919;-webkit-text-size-adjust:100%}
+body{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;background:#BACEE0;color:#191919;-webkit-text-size-adjust:100%}
 /* 화면 네 모서리에 고정. iOS 홈 화면 앱은 100dvh가 상태바만큼 짧게 잡혀서 아래에 흰 띠가 생김 */
 #app{position:fixed;inset:0;background:#BACEE0;display:flex;flex-direction:column;max-width:480px;margin:0 auto}
 .hidden{display:none!important}
@@ -116,7 +116,7 @@ let key,profile,profileRow,msgs=load(MSG)||[],plain=[];
 
 function show(id){
  const room=['top','list','bar'];
- for(const s of ['login','setup',...room])$(s).classList.toggle('hidden',id==='room'?!room.includes(s):s!==id);
+ for(const s of ['login','setup',...room])$(s).classList.toggle('hidden',id==='room'?!room.includes(s):s!==id); document.body.style.background=id==='room'?'':'#fff'; // 아이폰 상태바는 body 배경색을 따라감. 로그인/설정 화면은 흰색
 }
 const cache=()=>{try{localStorage.setItem(MSG,JSON.stringify(msgs))}catch(e){}}; // 캐시 넘치면 무시, 서버에 있음
 
@@ -139,6 +139,7 @@ function shrink(file,max,square){
 // ── 진입: 세션+기기 키 있으면 바로, 없으면 로그인 ──
 async function main(){
  const {data:{session}}=await sb.auth.getSession(),k=localStorage.getItem(KEY);
+ if(session&&k){const {error}=await sb.auth.getUser();if(error?.status>=400&&error.status<500){await sb.auth.signOut({scope:'local'});return main()}} // 지워진 계정이면 로그인 화면으로
  if(!session||!k){localStorage.removeItem(KEY);return show('login')}
  key=await crypto.subtle.importKey('raw',unb64(k),'AES-GCM',false,['encrypt','decrypt']);
  afterAuth();
