@@ -27,7 +27,7 @@ const int = (v: unknown, max: number) => Math.min(max, Math.max(0, Math.floor(Nu
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
-  // 사용자 토큰으로 호출 → 로그인 안 했거나 20시간 안 지났으면 여기서 끝. Claude 비용은 이 뒤에서만 나감.
+  // 사용자 토큰으로 호출 → 로그인 안 했거나 11시간 안 지났으면 여기서 끝. Claude 비용은 이 뒤에서만 나감.
   // ponytail: Claude 호출이 실패해도 그날 몫은 써버림. 실패가 잦아지면 되돌리는 RPC 추가.
   const sb = createClient(SB_URL, SB_KEY, {
     global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },

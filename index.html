@@ -76,7 +76,7 @@ body{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans 
   <input id="file" type="file" accept="image/*" class="hidden">
   <label>상대 이름<input id="name" type="text" autocomplete="off" required></label>
   <label>헤어진 날<input id="date" type="date"></label>
-  <label>AI 한마디 (메시지 내용은 AI에게 안 보내요)<select id="ai"><option value="day">매일</option><option value="week">매주</option><option value="off">끔</option></select></label>
+  <label>AI 한마디 (메시지 내용은 AI에게 안 보내요)<select id="ai"><option value="day">매일 낮 12시</option><option value="week">일주일마다 낮 12시</option><option value="off">끔</option></select></label>
   <button id="go">방 만들기</button>
   <button type="button" id="cancel" class="link hidden">취소</button>
   <p class="hint">이 방의 메시지는 아무에게도 가지 않아요.<br>서버에도 암호문만 남아요.</p>
@@ -96,6 +96,7 @@ body{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans 
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
 <script src="crypto.js"></script>
+<script src="due.js"></script>
 <script>
 // publishable key는 공개용. 데이터는 RLS + E2EE가 지킨다.
 const SB_URL='https://jjyvmsbizpevcinmflfd.supabase.co',SB_KEY='sb_publishable__ouR0LZd8tV11czxkxCOwA_MZCpefkz';
@@ -147,18 +148,23 @@ async function enter(){
  catch(e){msgs=[];plain=[]}                 // 다른 키로 잠긴 옛 캐시
  show('room');openRoom();
  await sync();
- maybeAi();
+ maybeAi();noonTimer();
 }
-// ── 한마디: 마지막 한마디 뒤로 내가 쓴 게 있고 간격이 지났으면, AI가 "읽고"(1 사라짐) 한마디 ──
-// AI에겐 D+N, 요일, 시각, 개수만 보낸다. 서버도 20시간에 한 번만 받아준다.
-const GAP={day:20*36e5,week:7*864e5};
+// ── 한마디: 낮 12시에 AI가 "읽고"(1 사라짐) 한마디. 언제 올지는 due.js ──
+// AI에겐 D+N, 요일, 시각, 개수만 보낸다. 서버는 11시간에 한 번만 받아준다(동시 호출도 하나만 통과).
 async function maybeAi(){
- const gap=GAP[profile.ai||'day'],last=plain.findLastIndex(m=>m.ai),unread=plain.length-1-last;
- if(!gap||!unread||Date.now()-plain[last<0?0:last].ts<gap)return;
+ const unread=aiDue(plain,profile.ai||'day');
+ if(!unread)return;
  const now=new Date();
  const {data,error}=await sb.functions.invoke('hanmadi',{body:{day:dday(),weekday:now.getDay(),hour:now.getHours(),count:unread}});
  if(!error&&data?.text)await push({ai:data.text});
 }
+// 켜둔 채로 12시가 되면, 그리고 폰에서 앱으로 돌아오면 다시 확인 (홈 화면 앱은 새로고침 없이 돌아옴)
+function noonTimer(){
+ const t=new Date();t.setHours(12,0,0,0);if(t<=Date.now())t.setDate(t.getDate()+1);
+ setTimeout(()=>{maybeAi();noonTimer()},t-Date.now());
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&profile&&key)maybeAi()});
 async function sync(){
  const last=msgs.length?msgs[msgs.length-1].id:0;
  const {data,error}=await sb.from('messages').select('id,iv,data,ts').gt('id',last).order('id');

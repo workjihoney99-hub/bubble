@@ -34,13 +34,14 @@ create table ai_usage (
 );
 alter table ai_usage enable row level security;
 
--- 20시간 안 지났으면 false. 확인과 기록을 한 문장으로 해서 동시 호출에도 한 번만 통과.
+-- 11시간 안 지났으면 false. 매일 낮 12시라도 전날 밤늦게 받은 것과는 12시간쯤만 벌어질 수 있어서.
+-- 확인과 기록을 한 문장으로 해서 동시 호출에도 한 번만 통과.
 create function claim_ai_slot() returns boolean
 language plpgsql security definer set search_path = public as $$
 begin
   insert into ai_usage (user_id, last_at) values (auth.uid(), now())
   on conflict (user_id) do update set last_at = now()
-    where ai_usage.last_at < now() - interval '20 hours';
+    where ai_usage.last_at < now() - interval '11 hours';
   return found;
 end $$;
 revoke all on function claim_ai_slot() from public, anon;

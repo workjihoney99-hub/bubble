@@ -1,6 +1,20 @@
-// node test.js — crypto.js 자가 점검
+// node test.js — crypto.js, due.js 자가 점검
 const vm=require('vm'),fs=require('fs'),path=require('path'),assert=require('assert');
 vm.runInThisContext(fs.readFileSync(path.join(__dirname,'crypto.js'),'utf8'));
+vm.runInThisContext(fs.readFileSync(path.join(__dirname,'due.js'),'utf8'));
+
+// 한마디 시점: 로컬 시각 기준 (2026-10-20 = 화)
+const T=(d,h,m=0)=>new Date(2026,9,d,h,m).getTime(), msg=ts=>({t:'x',ts}), ai=ts=>({ai:'y',ts});
+assert.strictEqual(aiDue([msg(T(20,9))],'day',T(20,11,59)),0,'12시 전엔 안 옴');
+assert.strictEqual(aiDue([msg(T(20,9))],'day',T(20,12)),1,'12시 정각에 옴');
+assert.strictEqual(aiDue([msg(T(20,9)),msg(T(20,10))],'day',T(20,18)),2,'12시 넘어 열면 그때 옴');
+assert.strictEqual(aiDue([msg(T(20,12,30))],'day',T(20,15)),0,'12시 뒤에 쓴 건 다음 날 12시에');
+assert.strictEqual(aiDue([msg(T(20,9)),ai(T(20,12)),msg(T(20,13))],'day',T(20,20)),0,'오늘 이미 받음');
+assert.strictEqual(aiDue([msg(T(20,9)),ai(T(20,12)),msg(T(20,13))],'day',T(21,12)),1,'다음 날 12시');
+assert.strictEqual(aiDue([msg(T(19,9)),ai(T(19,23,50))],'day',T(20,12)),0,'안 읽은 게 없으면 안 옴');
+assert.strictEqual(aiDue([ai(T(13,12)),msg(T(14,9))],'week',T(19,12)),0,'매주: 6일째는 아직');
+assert.strictEqual(aiDue([ai(T(13,12)),msg(T(14,9))],'week',T(20,12)),1,'매주: 7일째 12시');
+assert.strictEqual(aiDue([msg(T(20,9))],'off',T(20,13)),0,'끔');
 
 (async()=>{
  const a=await derive('correct horse','지훈'), a2=await derive('correct horse',' 지훈 '), b=await derive('wrong horse','지훈'), c=await derive('correct horse','민수');
