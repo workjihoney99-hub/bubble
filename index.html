@@ -157,7 +157,7 @@ async function maybeAi(){
  if(!gap||!unread||Date.now()-plain[last<0?0:last].ts<gap)return;
  const now=new Date();
  const {data,error}=await sb.functions.invoke('hanmadi',{body:{day:dday(),weekday:now.getDay(),hour:now.getHours(),count:unread}});
- if(!error&&data?.text)push({ai:data.text});
+ if(!error&&data?.text)await push({ai:data.text});
 }
 async function sync(){
  const last=msgs.length?msgs[msgs.length-1].id:0;

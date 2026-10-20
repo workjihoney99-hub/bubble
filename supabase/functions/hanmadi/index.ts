@@ -1,6 +1,6 @@
 // 앱을 열 때 부르는 "한마디". 메시지 내용은 받지 않는다(E2EE 유지).
 // 배포: Supabase 대시보드 Edge Functions에 이 파일을 그대로. Verify JWT는 끔(아래 RPC가 대신 확인).
-// 비밀값: ANTHROPIC_API_KEY (대시보드 Edge Functions > Secrets)
+// 비밀값: bubble_ai_key = Claude API 키 (대시보드 Edge Functions > Secrets)
 import Anthropic from "npm:@anthropic-ai/sdk@0.135.0";
 import { createClient } from "npm:@supabase/supabase-js@2.118.0";
 
@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
   const facts = `${day}. ${WEEK[int(b.weekday, 6)]}요일 ${int(b.hour, 23)}시. 지난 한마디 이후 쓴 메시지 ${int(b.count, 999)}개.`;
 
   try {
-    const msg = await new Anthropic().beta.messages.create({
+    const msg = await new Anthropic({ apiKey: Deno.env.get("bubble_ai_key") }).beta.messages.create({
       model: "claude-opus-5-5",
       max_tokens: 2000,
       betas: ["server-side-fallback-2026-07-01"],
