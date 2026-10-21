@@ -263,8 +263,9 @@ $('notify').onclick=async()=>{
 };
 
 // ── 채팅방 ──
-const dateStr=ts=>new Date(ts).toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
-const timeStr=ts=>new Date(ts).toLocaleTimeString('ko-KR',{hour:'numeric',minute:'2-digit'});
+// 포맷터는 한 번만. toLocale*은 호출마다 새로 만들어서 메시지 5000개면 render()가 0.4초
+const DF=new Intl.DateTimeFormat('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'}),TF=new Intl.DateTimeFormat('ko-KR',{hour:'numeric',minute:'2-digit'});
+const dateStr=ts=>DF.format(ts),timeStr=ts=>TF.format(ts);
 const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const dday=()=>profile.date?Math.floor((Date.now()-new Date(profile.date+'T00:00'))/864e5):null;
 function openRoom(){
