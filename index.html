@@ -109,16 +109,19 @@ body{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans 
 const SB_URL='https://jjyvmsbizpevcinmflfd.supabase.co',SB_KEY='sb_publishable__ouR0LZd8tV11czxkxCOwA_MZCpefkz';
 const sb=supabase.createClient(SB_URL,SB_KEY);
 const $=id=>document.getElementById(id);
-const KEY='bubble.key',MSG='bubble.msgs';   // 기기엔 AES 키 + 암호문 캐시만
-const load=k=>JSON.parse(localStorage.getItem(k)||'null');
+const KEY='bubble.key';   // 기기엔 AES 키(localStorage) + 암호문 캐시(IndexedDB, 한 줄씩)만
 const DEFAULT_PIC="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23C9CDD2'/><circle cx='50' cy='38' r='16' fill='%23fff'/><path d='M20 92c0-22 13-32 30-32s30 10 30 32z' fill='%23fff'/></svg>";
-let key,profile,profileRow,msgs=load(MSG)||[],plain=[];
+let key,profile,profileRow,msgs=[],plain=[];
 
 function show(id){
  const room=['top','list','bar'];
  for(const s of ['login','setup',...room])$(s).classList.toggle('hidden',id==='room'?!room.includes(s):s!==id); document.body.style.background=id==='room'?'':'#fff'; // 아이폰 상태바는 body 배경색을 따라감. 로그인/설정 화면은 흰색
 }
-const cache=()=>{try{localStorage.setItem(MSG,JSON.stringify(msgs))}catch(e){}}; // 캐시 넘치면 무시, 서버에 있음
+// 암호문 캐시: IndexedDB 'msgs'에 서버 행 그대로 한 줄씩. localStorage는 5MB에서 조용히 멈춰서 사진 몇십 장이면 넘쳤음
+const idb=new Promise(r=>{try{const o=indexedDB.open('bubble',1);o.onupgradeneeded=()=>o.result.createObjectStore('msgs',{keyPath:'id'});o.onsuccess=()=>r(o.result);o.onerror=()=>r(null)}catch(e){r(null)}});
+const store=(mode,f)=>idb.then(db=>db&&new Promise(r=>{const t=db.transaction('msgs',mode),q=f(t.objectStore('msgs'));t.oncomplete=()=>r(q&&q.result);t.onerror=t.onabort=()=>r()})); // 못 쓰면 undefined. 서버에 있으니 무시
+const cache=rows=>store('readwrite',s=>{for(const m of rows)s.put(m)});
+const uncache=()=>store('readwrite',s=>s.clear());
 
 // 이미지 파일을 작은 JPEG dataURL로. square=true면 중앙 정사각 크롭.
 function shrink(file,max,square){
@@ -152,8 +155,10 @@ async function afterAuth(){
 }
 async function enter(){
  profile=await dec(key,profileRow);
+ const old=localStorage.getItem('bubble.msgs');if(old){try{await cache(JSON.parse(old))}catch(e){}localStorage.removeItem('bubble.msgs')} // 옛 localStorage 캐시는 한 번 옮기고 지움
+ msgs=await store('readonly',s=>s.getAll())||[];
  try{plain=await Promise.all(msgs.map(async m=>({...await dec(key,m),ts:m.ts})))}
- catch(e){msgs=[];plain=[]}                 // 다른 키로 잠긴 옛 캐시
+ catch(e){msgs=[];plain=[];uncache()}       // 다른 키로 잠긴 옛 캐시
  show('room');openRoom();
  await sync();
  maybeAi();midnightTimer();
@@ -182,7 +187,7 @@ async function sync(){
  const {data,error}=await sb.from('messages').select('id,iv,data,ts').gt('id',last).order('id');
  if(error)return alert('불러오기 실패: '+error.message);
  for(const m of data){msgs.push(m);plain.push({...await dec(key,m),ts:m.ts})}
- if(data.length){cache();render()}
+ if(data.length){cache(data);render()}
 }
 
 // ── 로그인: 닉네임+암호 → 로그인키(서버)/암호화키(기기) ──
@@ -198,7 +203,7 @@ $('login').onsubmit=async e=>{
   if(error)return alert(/already/i.test(error.message)?'암호가 틀려요':'실패: '+error.message),reset();
  }
  key=k;localStorage.setItem(KEY,b64(await crypto.subtle.exportKey('raw',k)));
- msgs=[];cache();                            // 다른 계정 캐시 제거
+ msgs=[];await uncache();                    // 다른 계정 캐시 제거
  afterAuth();
 };
 
@@ -290,7 +295,7 @@ async function push(m,ts=Date.now()){
  const row={...await enc(key,m),ts};
  const {data,error}=await sb.from('messages').insert(row).select('id').single();
  if(error)return alert('전송 실패. 인터넷 확인해줘');
- row.id=data.id;msgs.push(row);cache();plain.push({...m,ts:row.ts});render();
+ row.id=data.id;msgs.push(row);cache([row]);plain.push({...m,ts:row.ts});render();
 }
 function send(){
  const t=$('txt').value.trim();if(!t)return;
